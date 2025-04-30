@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Repository Comparison Report</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>GitHub Repository Comparison Report</h1>
+        <p>Generated on: {{ generation_time }}</p>
+    </header>
+
+    <main>
+        {% for result in results %}
+        <section class="org-pair">
+            <h2>Comparison: {{ result.dev_org }} (Dev) vs. {{ result.prod_org }} (Prod)</h2>
+
+            {% if result.fetch_error %}
+                <div class="error-box">
+                    <strong>Error fetching repositories:</strong> {{ result.fetch_error }}
+                </div>
+            {% else %}
+                <section class="repo-list">
+                    <h3>Repositories Only in Dev ({{ result.dev_org }})</h3>
+                    {% if result.dev_only_repos %}
+                        <ul>
+                            {% for repo in result.dev_only_repos %}
+                                <li>{{ repo }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>None</p>
+                    {% endif %}
+                </section>
+
+                <section class="repo-list">
+                    <h3>Repositories Only in Prod ({{ result.prod_org }})</h3>
+                    {% if result.prod_only_repos %}
+                        <ul>
+                            {% for repo in result.prod_only_repos %}
+                                <li>{{ repo }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>None</p>
+                    {% endif %}
+                </section>
+
+                <section>
+                    <h3>Common Repositories Comparison</h3>
+                    {% if result.common_repos %}
+                        {% for common in result.common_repos %}
+                        <details class="repo-comparison status-{{ common.comparison.status | lower | replace(' ', '-') }}">
+                            <summary>
+                                <strong>{{ common.dev_repo_name }} (Dev) vs. {{ common.prod_repo_name }} (Prod)</strong> -
+                                <span class="status">{{ common.comparison.status }}</span>
+                                {% if common.comparison.status != 'In Sync' and common.comparison.dev_main_sha and common.comparison.prod_main_sha %}
+                                    <span class="shas">(Dev: {{ common.comparison.dev_main_sha[:7] }}, Prod: {{ common.comparison.prod_main_sha[:7] }})</span>
+                                {% elif common.comparison.status == 'In Sync' and common.comparison.dev_main_sha %}
+                                     <span class="shas">(SHA: {{ common.comparison.dev_main_sha[:7] }})</span>
+                                {% endif %}
+                            </summary>
+                            <div class="comparison-details">
+                                {% if common.comparison.error_message %}
+                                    <p class="error-message">Error: {{ common.comparison.error_message }}</p>
+                                {% elif common.comparison.status == 'Differences Found' %}
+                                    <h4>Added Files (in Dev):</h4>
+                                    {% if common.comparison.added_files %}
+                                        <ul>{% for file in common.comparison.added_files %}<li>{{ file }}</li>{% endfor %}</ul>
+                                    {% else %} <p>None</p> {% endif %}
+
+                                    <h4>Deleted Files (from Dev):</h4>
+                                     {% if common.comparison.deleted_files %}
+                                        <ul>{% for file in common.comparison.deleted_files %}<li>{{ file }}</li>{% endfor %}</ul>
+                                    {% else %} <p>None</p> {% endif %}
+
+                                    <h4>Modified Files:</h4>
+                                    {% if common.comparison.modified_files %}
+                                        {% for mod_file in common.comparison.modified_files %}
+                                            <details class="file-diff">
+                                                <summary>{{ mod_file.path }}</summary>
+                                                <pre><code>{{ mod_file.diff }}</code></pre>
+                                            </details>
+                                        {% endfor %}
+                                    {% else %} <p>None</p> {% endif %}
+                                {% elif common.comparison.status == 'In Sync' %}
+                                    <p>The default branches are in sync.</p>
+                                {% endif %}
+                            </div>
+                        </details>
+                        {% endfor %}
+                    {% else %}
+                        <p>No common repositories found based on the naming convention.</p>
+                    {% endif %}
+                </section>
+            {% endif %}
+        </section>
+        {% else %}
+        <p>No organization pairs found in the configuration file.</p>
+        {% endfor %}
+    </main>
+
+    <footer>
+        <p>End of Report</p>
+    </footer>
+</body>
+</html>
