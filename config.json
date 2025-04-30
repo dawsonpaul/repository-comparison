@@ -1,0 +1,10 @@
+[
+  {
+    "dev_org": "dev-example-team",
+    "prod_org": "prod-example-team"
+  },
+  {
+    "dev_org": "another-dev-org",
+    "prod_org": "another-prod-org"
+  }
+]

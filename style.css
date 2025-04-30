@@ -1,0 +1,176 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: #f6f8fa;
+    color: #24292e;
+}
+
+header, footer {
+    background-color: #24292e;
+    color: #ffffff;
+    padding: 1em 2em;
+    text-align: center;
+}
+
+header h1 {
+    margin: 0;
+}
+
+main {
+    max-width: 1000px;
+    margin: 2em auto;
+    padding: 0 1em;
+}
+
+section.org-pair {
+    background-color: #ffffff;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    margin-bottom: 2em;
+    padding: 1.5em;
+}
+
+section.org-pair h2 {
+    margin-top: 0;
+    border-bottom: 1px solid #eaecef;
+    padding-bottom: 0.5em;
+    margin-bottom: 1em;
+}
+
+section.repo-list {
+    margin-bottom: 1.5em;
+}
+
+h3 {
+    color: #0366d6;
+    margin-bottom: 0.5em;
+}
+
+ul {
+    list-style: disc;
+    padding-left: 2em;
+}
+
+li {
+    margin-bottom: 0.3em;
+}
+
+details {
+    border: 1px solid #d1d5da;
+    border-radius: 4px;
+    margin-bottom: 0.8em;
+    background-color: #f9f9f9;
+}
+
+details summary {
+    padding: 0.8em 1.2em;
+    cursor: pointer;
+    font-weight: bold;
+    background-color: #f1f1f1;
+    border-bottom: 1px solid #d1d5da;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+details[open] summary {
+    border-bottom: 1px solid #d1d5da;
+}
+
+.comparison-details {
+    padding: 1em 1.5em;
+    background-color: #ffffff;
+}
+
+.comparison-details h4 {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    color: #586069;
+}
+
+.comparison-details ul {
+    margin-top: 0.5em;
+}
+
+.status {
+    font-weight: bold;
+    padding: 0.2em 0.5em;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.shas {
+    font-family: monospace;
+    font-size: 0.85em;
+    color: #586069;
+    margin-left: 1em;
+}
+
+.status-in-sync .status { background-color: #dbf4d8; color: #22863a; }
+.status-differences-found .status { background-color: #fffbdd; color: #b08800; }
+.status-branch-error .status,
+.status-api-error .status,
+.status-comparison-error .status,
+.status-repo-access-error .status,
+.status-processing-error .status { background-color: #ffdce0; color: #d73a49; }
+
+.error-box {
+    background-color: #ffdce0;
+    color: #d73a49;
+    border: 1px solid #f9aeae;
+    padding: 1em;
+    border-radius: 4px;
+    margin-bottom: 1em;
+}
+
+.error-message {
+    color: #cb2431;
+    font-style: italic;
+}
+
+details.file-diff {
+    margin-top: 0.5em;
+    border-color: #e1e4e8;
+}
+
+details.file-diff summary {
+    background-color: #f6f8fa;
+    font-weight: normal;
+    font-family: monospace;
+    font-size: 0.9em;
+    padding: 0.5em 1em;
+}
+
+pre {
+    background-color: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    padding: 1em;
+    overflow-x: auto;
+    border-radius: 3px;
+    margin-top: 0.5em;
+}
+
+code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-size: 0.85em;
+    white-space: pre;
+}
+
+/* Basic diff styling */
+pre code span.diff-add { color: #22863a; background-color: #e6ffed; }
+pre code span.diff-del { color: #d73a49; background-color: #ffeef0; }
+pre code span.diff-hdr { color: #6f42c1; font-weight: bold; }
+
+/* Apply styling to diff lines (requires JS or more complex template logic usually) */
+/* This basic CSS won't color lines directly, but sets up classes if you enhance */
+pre code {
+    display: block; /* Ensure pre takes block layout */
+}
+
+/* Attempt basic line coloring (might not be perfect without JS) */
+pre code::before {
+    /* This is tricky without line numbers or JS */
+    content: '';
+}
