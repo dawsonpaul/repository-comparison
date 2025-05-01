@@ -1,6 +1,8 @@
 import os
 import json
 import difflib
+import base64
+import requests # For direct content download
 from datetime import datetime
 from github import Github, GithubException, UnknownObjectException
 from jinja2 import Environment, FileSystemLoader
@@ -123,75 +125,64 @@ def compare_main_branches(dev_repo, prod_repo):
                 continue  # Files are identical
 
             try:
-                # Fetch content only if SHAs differ
-                dev_content_blob = dev_repo.get_git_blob(dev_item.sha)
-                prod_content_blob = prod_repo.get_git_blob(prod_item.sha)
-
-                # Decode content (handle potential encoding issues)
+                # Fetch content using download_url and requests
                 dev_content, prod_content = None, None
                 diff_error = None
+                headers = {'Authorization': f'token {GITHUB_TOKEN}'}
 
-                # --- Decode Dev Content ---
-                dev_content_bytes = None # Initialize
+                # --- Fetch Dev Content ---
                 try:
-                    dev_content_raw = dev_content_blob.content
-                    if dev_content_blob.encoding == 'base64':
-                        dev_content_bytes = dev_content_raw.decode('base64')
-                    elif isinstance(dev_content_raw, str): # Already decoded?
-                         # If it was already a string, maybe it's okay? Let's try decoding directly first.
-                         dev_content = dev_content_raw # Assume it's already decoded string
-                    else: # Assume bytes
-                        dev_content_bytes = dev_content_raw
-
-                    # If we ended up with bytes, try decoding as UTF-8
-                    if isinstance(dev_content_bytes, bytes):
-                        dev_content = dev_content_bytes.decode('utf-8')
-
+                    dev_url = dev_item.download_url
+                    if not dev_url: # download_url might be None for submodules etc.
+                         raise ValueError("Download URL not available for dev item.")
+                    response_dev = requests.get(dev_url, headers=headers, timeout=30)
+                    response_dev.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+                    dev_bytes = response_dev.content
+                    dev_content = dev_bytes.decode('utf-8')
+                except requests.exceptions.RequestException as e:
+                    diff_error = f"Dev: Network error fetching content: {e}"
                 except UnicodeDecodeError:
-                    diff_error = "Cannot decode dev content as UTF-8 (likely binary)."
+                    diff_error = "Dev: Cannot decode as UTF-8 (likely binary)."
                 except Exception as e:
-                    diff_error = f"Error decoding dev content: {e}"
+                    diff_error = f"Dev: Error fetching/decoding content: {e}"
 
-                # --- Decode Prod Content ---
-                prod_content_bytes = None # Initialize to handle potential UnboundLocalError
+                # --- Fetch Prod Content ---
                 try:
-                    prod_content_raw = prod_content_blob.content
-                    if prod_content_blob.encoding == 'base64':
-                        prod_content_bytes = prod_content_raw.decode('base64')
-                    elif isinstance(prod_content_raw, str):
-                         prod_content = prod_content_raw # Assume it's already decoded string
-                    else: # Assume bytes
-                        prod_content_bytes = prod_content_raw
-
-                    # If we ended up with bytes, try decoding as UTF-8
-                    if isinstance(prod_content_bytes, bytes):
-                         prod_content = prod_content_bytes.decode('utf-8')
-
+                    prod_url = prod_item.download_url
+                    if not prod_url:
+                        raise ValueError("Download URL not available for prod item.")
+                    response_prod = requests.get(prod_url, headers=headers, timeout=30)
+                    response_prod.raise_for_status()
+                    prod_bytes = response_prod.content
+                    prod_content = prod_bytes.decode('utf-8')
+                except requests.exceptions.RequestException as e:
+                    error_msg = f"Prod: Network error fetching content: {e}"
+                    diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
                 except UnicodeDecodeError:
-                    error_msg = "Cannot decode prod content as UTF-8 (likely binary)."
-                    diff_error = (diff_error + " " + error_msg) if diff_error else error_msg
+                    error_msg = "Prod: Cannot decode as UTF-8 (likely binary)."
+                    diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
                 except Exception as e:
-                    error_msg = f"Error decoding prod content: {e}"
-                    diff_error = (diff_error + " " + error_msg) if diff_error else error_msg
-
+                    error_msg = f"Prod: Error fetching/decoding content: {e}"
+                    diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
 
                 # --- Compare and Generate Diff ---
                 diff_output = ""
-                # Only proceed if both were successfully decoded to strings
-                if isinstance(dev_content, str) and isinstance(prod_content, str):
+                # Only generate diff if both were successfully decoded to strings
+                if dev_content is not None and prod_content is not None:
                     # Explicitly compare decoded content
                     if dev_content == prod_content:
-                         continue # Content is identical after decoding, skip
+                        continue  # Content is identical after decoding, skip
 
                     # Generate diff if content differs
                     diff = list(difflib.unified_diff(
-                        prod_content.splitlines(keepends=True), # Use keepends for accurate diff
+                        # Use keepends for accurate diff
+                        prod_content.splitlines(keepends=True),
                         dev_content.splitlines(keepends=True),
                         fromfile=f"a/{path} (Prod: {prod_item.sha[:7]})",
                         tofile=f"b/{path} (Dev: {dev_item.sha[:7]})",
-                        lineterm='' # difflib adds its own newlines
+                        lineterm=''  # difflib adds its own newlines
                     ))
-                    if diff: # Only join if there are actual diff lines
+                    if diff:  # Only join if there are actual diff lines
                         diff_output = "".join(diff)
                     # If no diff generated but content wasn't identical earlier, it implies only metadata/SHA changed
                     # We already continued if content was identical, so if we reach here and diff is empty,
