@@ -79,9 +79,15 @@
                                     <h4>Modified Files:</h4>
                                     {% if common.comparison.modified_files %}
                                         {% for mod_file in common.comparison.modified_files %}
-                                            <details class="file-diff">
-                                                <summary>{{ mod_file.path }}</summary>
-                                                <pre><code>{{ mod_file.diff }}</code></pre>
+                                            <details class="file-diff{% if mod_file.error %} diff-error{% endif %}">
+                                                <summary>{{ mod_file.path }}{% if mod_file.error %} - <span class="error-inline">Diff Unavailable</span>{% endif %}</summary>
+                                                {% if mod_file.error %}
+                                                    <p class="error-message">Could not generate diff: {{ mod_file.error }}</p>
+                                                {% elif mod_file.diff %}
+                                                    <pre><code>{{ mod_file.diff }}</code></pre>
+                                                {% else %}
+                                                     <p><i>Content differs, but diff is empty (e.g., whitespace/line ending changes only).</i></p>
+                                                {% endif %}
                                             </details>
                                         {% endfor %}
                                     {% else %} <p>None</p> {% endif %}
