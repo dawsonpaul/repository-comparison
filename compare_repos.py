@@ -2,7 +2,7 @@ import os
 import json
 import difflib
 import base64
-import requests # For direct content download
+# Removed requests import
 from datetime import datetime
 from github import Github, GithubException, UnknownObjectException
 from jinja2 import Environment, FileSystemLoader
@@ -17,23 +17,33 @@ ENV_FILE = '.env'  # Optional: For storing GITHUB_TOKEN
 # --- Load Environment Variables (Optional but Recommended) ---
 load_dotenv(dotenv_path=ENV_FILE)
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-# Replace with your default or get from env
-GITHUB_ENTERPRISE_URL = os.getenv(
-    'GITHUB_ENTERPRISE_URL', 'https://github.yourcompany.com')
+# Default to public GitHub API if URL is not set or is the placeholder
+raw_ghe_url = os.getenv('GITHUB_ENTERPRISE_URL')
+if not raw_ghe_url or raw_ghe_url == 'https://github.yourcompany.com':
+    GITHUB_API_URL = 'https://api.github.com' # Public GitHub API
+    print("Targeting public GitHub.com")
+else:
+    # Assume it's a GHE instance, construct the API URL
+    # Ensure no trailing slash and add /api/v3
+    base_url = raw_ghe_url.rstrip('/')
+    GITHUB_API_URL = f"{base_url}/api/v3"
+    print(f"Targeting GitHub Enterprise: {base_url}")
+
 
 # --- Helper Functions ---
 
 
 def get_github_instance():
-    """Authenticates and returns a PyGithub instance."""
+    """Authenticates and returns a PyGithub instance using the determined API URL."""
     if not GITHUB_TOKEN:
         raise ValueError("GITHUB_TOKEN environment variable not set.")
-    if GITHUB_ENTERPRISE_URL and GITHUB_ENTERPRISE_URL != 'https://api.github.com':
-        print(f"Connecting to GitHub Enterprise: {GITHUB_ENTERPRISE_URL}")
-        return Github(base_url=f"{GITHUB_ENTERPRISE_URL}/api/v3", login_or_token=GITHUB_TOKEN)
+
+    if GITHUB_API_URL == 'https://api.github.com':
+        # Connect to public GitHub
+        return Github(login_or_token=GITHUB_TOKEN)
     else:
-        print("Connecting to GitHub.com")
-        return Github(GITHUB_TOKEN)
+        # Connect to GitHub Enterprise using the constructed API URL
+        return Github(base_url=GITHUB_API_URL, login_or_token=GITHUB_TOKEN)
 
 
 def get_org_repos(g, org_name):
@@ -130,44 +140,33 @@ def compare_main_branches(dev_repo, prod_repo):
                 dev_blob = dev_repo.get_git_blob(dev_item.sha)
                 prod_blob = prod_repo.get_git_blob(prod_item.sha)
 
-                # Fetch content using download_url and requests
+                # Decode content using .decoded_content which should return bytes
                 dev_content, prod_content = None, None
                 diff_error = None
-                headers = {'Authorization': f'token {GITHUB_TOKEN}'}
 
-                # --- Fetch Dev Content ---
+                # --- Decode Dev Content ---
                 try:
-                    dev_url = dev_blob.download_url # Use download_url from the blob
-                    if not dev_url:
-                         raise ValueError("Download URL not available for dev blob.")
-                    response_dev = requests.get(dev_url, headers=headers, timeout=30)
-                    response_dev.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-                    dev_bytes = response_dev.content
+                    dev_bytes = dev_blob.decoded_content # Use .decoded_content
+                    if dev_bytes is None:
+                         # Handle case where content might be missing or too large?
+                         raise ValueError("Decoded content is None for dev blob.")
                     dev_content = dev_bytes.decode('utf-8')
-                except requests.exceptions.RequestException as e:
-                    diff_error = f"Dev: Network error fetching content: {e}"
                 except UnicodeDecodeError:
                     diff_error = "Dev: Cannot decode as UTF-8 (likely binary)."
                 except Exception as e:
-                    diff_error = f"Dev: Error fetching/decoding content: {e}"
+                    diff_error = f"Dev: Error decoding content: {e}"
 
-                # --- Fetch Prod Content ---
+                # --- Decode Prod Content ---
                 try:
-                    prod_url = prod_blob.download_url # Use download_url from the blob
-                    if not prod_url:
-                        raise ValueError("Download URL not available for prod blob.")
-                    response_prod = requests.get(prod_url, headers=headers, timeout=30)
-                    response_prod.raise_for_status()
-                    prod_bytes = response_prod.content
+                    prod_bytes = prod_blob.decoded_content # Use .decoded_content
+                    if prod_bytes is None:
+                         raise ValueError("Decoded content is None for prod blob.")
                     prod_content = prod_bytes.decode('utf-8')
-                except requests.exceptions.RequestException as e:
-                    error_msg = f"Prod: Network error fetching content: {e}"
-                    diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
                 except UnicodeDecodeError:
                     error_msg = "Prod: Cannot decode as UTF-8 (likely binary)."
                     diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
                 except Exception as e:
-                    error_msg = f"Prod: Error fetching/decoding content: {e}"
+                    error_msg = f"Prod: Error decoding content: {e}"
                     diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
 
                 # --- Compare and Generate Diff ---
@@ -385,8 +384,10 @@ if __name__ == "__main__":
         print("Error: GITHUB_TOKEN environment variable is not set.")
         print("Please set it or create a .env file with GITHUB_TOKEN='your_pat_here'.")
         exit(1)
-    if GITHUB_ENTERPRISE_URL == 'https://github.yourcompany.com':
-        print("Warning: GITHUB_ENTERPRISE_URL is set to the placeholder.")
-        print("Ensure it's correctly set in your environment or .env file if using GitHub Enterprise.")
+    # Check the raw value read from environment for the placeholder warning
+    if raw_ghe_url == 'https://github.yourcompany.com':
+        print("Warning: GITHUB_ENTERPRISE_URL is still set to the placeholder 'https://github.yourcompany.com'.")
+        print("The script will target public GitHub.com by default.")
+        print("If you intend to use GitHub Enterprise, please set GITHUB_ENTERPRISE_URL correctly in your .env file.")
 
     main()

@@ -1,4 +1,3 @@
 PyGithub
 python-dotenv
 Jinja2
-requests
