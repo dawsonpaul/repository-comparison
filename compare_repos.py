@@ -17,70 +17,40 @@ ENV_FILE = '.env'  # Optional: For storing GITHUB_TOKEN
 # --- Load Environment Variables (Optional but Recommended) ---
 load_dotenv(dotenv_path=ENV_FILE)
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-# Default to public GitHub API if URL is not set or is the placeholder
-raw_ghe_url = os.getenv('GITHUB_ENTERPRISE_URL')
-if not raw_ghe_url or raw_ghe_url == 'https://github.yourcompany.com':
-    GITHUB_API_URL = 'https://api.github.com'  # Public GitHub API
-    print("Targeting public GitHub.com")
-else:
-    # Assume it's a GHE instance, construct the API URL
-    # Ensure no trailing slash and add /api/v3
-    base_url = raw_ghe_url.rstrip('/')
-    GITHUB_API_URL = f"{base_url}/api/v3"
-    print(f"Targeting GitHub Enterprise: {base_url}")
+GITHUB_ENTERPRISE_URL = os.getenv('GITHUB_ENTERPRISE_URL') # Required for GHE
 
 
 # --- Helper Functions ---
 
 
 def get_github_instance():
-    """Authenticates and returns a PyGithub instance using the determined API URL."""
+    """Authenticates and returns a PyGithub instance for GHE."""
     if not GITHUB_TOKEN:
         raise ValueError("GITHUB_TOKEN environment variable not set.")
+    if not GITHUB_ENTERPRISE_URL:
+        raise ValueError("GITHUB_ENTERPRISE_URL environment variable not set for GHE.")
 
-    if GITHUB_API_URL == 'https://api.github.com':
-        # Connect to public GitHub
-        return Github(login_or_token=GITHUB_TOKEN)
-    else:
-        # Connect to GitHub Enterprise using the constructed API URL
-        return Github(base_url=GITHUB_API_URL, login_or_token=GITHUB_TOKEN)
+    # Construct the API URL for GHE
+    base_url = GITHUB_ENTERPRISE_URL.rstrip('/')
+    api_url = f"{base_url}/api/v3"
+    print(f"Connecting to GitHub Enterprise: {base_url}")
+    return Github(base_url=api_url, login_or_token=GITHUB_TOKEN)
 
 
-def get_account_repos(g, account_name):
-    """Fetches all repository names for a given user account or organization."""
-    print(f"Fetching repositories for account: {account_name}...")
-    account = None
+def get_org_repos(g, org_name):
+    """Fetches all repository names for a given organization."""
+    print(f"Fetching repositories for organization: {org_name}...")
     try:
-        # Try getting as a user first
-        account = g.get_user(account_name)
-        print(f"Account '{account_name}' identified as a User.")
+        org = g.get_organization(org_name)
+        repos = {repo.name for repo in org.get_repos()}
+        print(f"Found {len(repos)} repositories in {org_name}.")
+        return repos, org  # Return org object as well
     except UnknownObjectException:
-        # If not a user, try as an organization
-        try:
-            account = g.get_organization(account_name)
-            print(f"Account '{account_name}' identified as an Organization.")
-        except UnknownObjectException:
-            print(
-                f"Error: Account '{account_name}' not found as User or Organization, or token lacks permissions.")
-            return set(), None
-        except Exception as e_org:
-            print(
-                f"An error occurred fetching organization {account_name}: {e_org}")
-            return set(), None
-    except Exception as e_user:
-        print(f"An error occurred fetching user {account_name}: {e_user}")
-        return set(), None
-
-    # Fetch repos from the identified account (user or org)
-    try:
-        repos = {repo.name for repo in account.get_repos()}
-        print(f"Found {len(repos)} repositories in {account_name}.")
-        return repos, account  # Return user/org object
-    except Exception as e_repos:
         print(
-            f"An error occurred fetching repos for {account_name}: {e_repos}")
+            f"Error: Organization '{org_name}' not found or token lacks permissions.")
         return set(), None
     except Exception as e:
+        print(f"An error occurred fetching repos for {org_name}: {e}")
         return set(), None
 
 
@@ -337,13 +307,13 @@ def main():
             "fetch_error": None
         }
 
-        # Use the new function name
-        dev_repos, dev_account_obj = get_account_repos(g, dev_org_name)
-        prod_repos, prod_account_obj = get_account_repos(g, prod_org_name)
+        # Use the original function name for organizations
+        dev_repos, dev_org_obj = get_org_repos(g, dev_org_name)
+        prod_repos, prod_org_obj = get_org_repos(g, prod_org_name)
 
-        if dev_account_obj is None or prod_account_obj is None:
+        if dev_org_obj is None or prod_org_obj is None:
             pair_result[
-                "fetch_error"] = f"Could not fetch repositories for one or both accounts ({dev_org_name}, {prod_org_name}). Check names and token permissions."
+                "fetch_error"] = f"Could not fetch repositories for one or both organizations ({dev_org_name}, {prod_org_name}). Check names and token permissions."
             all_results.append(pair_result)
             continue  # Skip comparison if we can't get repos
 
@@ -376,9 +346,9 @@ def main():
                 "comparison": None
             }
             try:
-                # Use the fetched account objects
-                dev_repo_obj = dev_account_obj.get_repo(dev_name)
-                prod_repo_obj = prod_account_obj.get_repo(prod_name)
+                # Use the fetched organization objects
+                dev_repo_obj = dev_org_obj.get_repo(dev_name)
+                prod_repo_obj = prod_org_obj.get_repo(prod_name)
                 common_repo_info["comparison"] = compare_main_branches(
                     dev_repo_obj, prod_repo_obj)
             except UnknownObjectException as repo_e:
@@ -428,10 +398,9 @@ if __name__ == "__main__":
         print("Error: GITHUB_TOKEN environment variable is not set.")
         print("Please set it or create a .env file with GITHUB_TOKEN='your_pat_here'.")
         exit(1)
-    # Check the raw value read from environment for the placeholder warning
-    if raw_ghe_url == 'https://github.yourcompany.com':
-        print("Warning: GITHUB_ENTERPRISE_URL is still set to the placeholder 'https://github.yourcompany.com'.")
-        print("The script will target public GitHub.com by default.")
-        print("If you intend to use GitHub Enterprise, please set GITHUB_ENTERPRISE_URL correctly in your .env file.")
+    if not GITHUB_ENTERPRISE_URL:
+         print("Error: GITHUB_ENTERPRISE_URL environment variable is not set.")
+         print("Please set it in your .env file (e.g., GITHUB_ENTERPRISE_URL='https://github.yourcompany.com').")
+         exit(1)
 
     main()
