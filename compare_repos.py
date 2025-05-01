@@ -125,6 +125,11 @@ def compare_main_branches(dev_repo, prod_repo):
                 continue  # Files are identical
 
             try:
+                # Get blob objects first to ensure we have download_url if it's a file
+                # This also implicitly filters out non-blob types like submodules earlier
+                dev_blob = dev_repo.get_git_blob(dev_item.sha)
+                prod_blob = prod_repo.get_git_blob(prod_item.sha)
+
                 # Fetch content using download_url and requests
                 dev_content, prod_content = None, None
                 diff_error = None
@@ -132,9 +137,9 @@ def compare_main_branches(dev_repo, prod_repo):
 
                 # --- Fetch Dev Content ---
                 try:
-                    dev_url = dev_item.download_url
-                    if not dev_url: # download_url might be None for submodules etc.
-                         raise ValueError("Download URL not available for dev item.")
+                    dev_url = dev_blob.download_url # Use download_url from the blob
+                    if not dev_url:
+                         raise ValueError("Download URL not available for dev blob.")
                     response_dev = requests.get(dev_url, headers=headers, timeout=30)
                     response_dev.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
                     dev_bytes = response_dev.content
@@ -148,9 +153,9 @@ def compare_main_branches(dev_repo, prod_repo):
 
                 # --- Fetch Prod Content ---
                 try:
-                    prod_url = prod_item.download_url
+                    prod_url = prod_blob.download_url # Use download_url from the blob
                     if not prod_url:
-                        raise ValueError("Download URL not available for prod item.")
+                        raise ValueError("Download URL not available for prod blob.")
                     response_prod = requests.get(prod_url, headers=headers, timeout=30)
                     response_prod.raise_for_status()
                     prod_bytes = response_prod.content
@@ -187,26 +192,45 @@ def compare_main_branches(dev_repo, prod_repo):
                     # If no diff generated but content wasn't identical earlier, it implies only metadata/SHA changed
                     # We already continued if content was identical, so if we reach here and diff is empty,
                     # it means something subtle changed (like line endings normalized by git). We'll still report it.
-                    # If diff is empty, the template handles it.
+                    # If diff is empty, it means content is identical after decoding
+                    # The template will handle displaying this correctly if needed,
+                    # but we only add to modified_files if there's a real diff or an error.
 
-                # Add to modified list if diff was generated OR if there was a decoding error
+                # Add to modified list ONLY if a diff was generated OR if there was a decoding/fetch error
                 if diff_output or diff_error:
                     comparison_result["modified_files"].append({
                         "path": path,
                         "diff": diff_output,
                         "error": diff_error
                     })
+                # If we reach here without appending, it means SHAs differed but decoded content was identical.
 
-            except Exception as file_diff_e:
-                print(f"    Error comparing file '{path}': {file_diff_e}")
+            except GithubException as gh_api_e:
+                 # Handle errors getting blobs (e.g., permissions, not found)
+                 print(f"    Error getting blob for file '{path}': {gh_api_e}")
+                 comparison_result["modified_files"].append({
+                        "path": path, "diff": "", "error": f"Error accessing file content: {gh_api_e}"
+                 })
+            except Exception as file_comp_e:
+                # Catch other potential errors during comparison for this file
+                print(f"    Error comparing file '{path}': {file_comp_e}")
                 comparison_result["modified_files"].append({
-                    "path": path,
-                    "diff": "",
-                    "error": f"Error generating diff: {file_diff_e}"
+                    "path": path, "diff": "", "error": f"Error comparing file: {file_comp_e}"
                 })
 
-        print(
-            f"  Comparison complete: {len(comparison_result['added_files'])} added, {len(comparison_result['deleted_files'])} deleted, {len(comparison_result['modified_files'])} modified.")
+        # --- Final Status Check ---
+        # If status is "Differences Found" but there are no added/deleted/modified files
+        # (meaning only SHAs differed but content was identical), revert status to "In Sync".
+        if (comparison_result["status"] == "Differences Found" and
+                not comparison_result["added_files"] and
+                not comparison_result["deleted_files"] and
+                not comparison_result["modified_files"]):
+            print("  Differences only in file SHAs, decoded content is identical. Setting status to 'In Sync'.")
+            comparison_result["status"] = "In Sync"
+        else:
+             print(
+                f"  Comparison complete: {len(comparison_result['added_files'])} added, {len(comparison_result['deleted_files'])} deleted, {len(comparison_result['modified_files'])} modified.")
+
 
     except UnknownObjectException as branch_e:
         error_msg = f"Error accessing default branch: {branch_e}. Does it exist in both repos?"
