@@ -243,45 +243,67 @@ code {
     white-space: pre;
 }
 
-/* Diff line colors and styling */
-pre code .diff-add {
-    color: #1f7a2c; /* Dark green text */
-    background-color: #dff7e6; /* Lighter green background */
-    display: block;
-    padding-left: 2.5em; /* Indent text */
-    text-indent: -1.5em; /* Bring '+' sign back */
+/* Diff line colors and styling - Enhanced */
+pre code span { display: block; } /* Ensure each line is block for background */
+
+pre code .diff-add,
+pre code span[data-prefix='+'] { /* Target lines starting with + */
+    background-color: #e6ffec;
+    color: #24292e; /* Keep text readable */
+    padding-left: 1em;
+    position: relative;
 }
-pre code .diff-add::before {
-    content: "+ ";
-    color: #1f7a2c;
-    font-weight: bold;
-    display: inline-block;
-    width: 1.5em; /* Ensure space for '+' */
+pre code .diff-add::before,
+pre code span[data-prefix='+']::before {
+     content: '+';
+     position: absolute;
+     left: 0.2em;
+     color: #1f7a2c;
+     font-weight: bold;
 }
 
-pre code .diff-del {
-    color: #b31d28; /* Dark red text */
-    background-color: #ffebe9; /* Lighter red background */
-    display: block;
-    padding-left: 2.5em; /* Indent text */
-    text-indent: -1.5em; /* Bring '-' sign back */
+
+pre code .diff-del,
+pre code span[data-prefix='-'] { /* Target lines starting with - */
+    background-color: #ffeef0;
+    color: #24292e; /* Keep text readable */
+    padding-left: 1em;
+    position: relative;
 }
-pre code .diff-del::before {
-    content: "- ";
-    color: #b31d28;
-    font-weight: bold;
-    display: inline-block;
-    width: 1.5em; /* Ensure space for '-' */
+pre code .diff-del::before,
+pre code span[data-prefix='-']::before {
+     content: '-';
+     position: absolute;
+     left: 0.2em;
+     color: #b31d28;
+     font-weight: bold;
 }
 
-pre code .diff-hdr {
-    color: #57606a; /* Gray for header lines */
-    font-weight: bold;
-    display: block;
-    background-color: #f1f3f5; /* Light gray background for headers */
-    margin: 0.5em 0;
-    padding: 0.2em 0.5em;
+pre code .diff-hdr,
+pre code span[data-prefix='@'], /* Target lines starting with @@ */
+pre code span[data-prefix='-'], /* Target lines starting with --- */
+pre code span[data-prefix='+'] { /* Target lines starting with +++ */
+    color: #57606a;
+    background-color: #f1f8ff; /* Light blue background for headers */
+    font-weight: normal; /* Less prominent than changes */
+    padding: 0.1em 0.5em;
+    margin: 0.2em 0;
+}
+/* Override specific header prefixes if needed */
+pre code span[data-prefix='-'] { /* --- lines */
+     /* Keep specific styling if desired, e.g., different color */
+     color: #8c959f;
+}
+pre code span[data-prefix='+'] { /* +++ lines */
+     /* Keep specific styling if desired */
+     color: #8c959f;
+}
+pre code span[data-prefix='@'] { /* @@ lines */
+     font-style: italic;
+     color: #6a737d;
 }
 
-/* Ensure spans within code are treated as blocks for background coloring */
-pre code > span { display: block; }
+/* Default line style (no prefix) */
+pre code span:not([data-prefix]) {
+    padding-left: 1em; /* Align with +/- lines */
+}

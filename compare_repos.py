@@ -20,7 +20,7 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 # Default to public GitHub API if URL is not set or is the placeholder
 raw_ghe_url = os.getenv('GITHUB_ENTERPRISE_URL')
 if not raw_ghe_url or raw_ghe_url == 'https://github.yourcompany.com':
-    GITHUB_API_URL = 'https://api.github.com' # Public GitHub API
+    GITHUB_API_URL = 'https://api.github.com'  # Public GitHub API
     print("Targeting public GitHub.com")
 else:
     # Assume it's a GHE instance, construct the API URL
@@ -64,8 +64,9 @@ def get_account_repos(g, account_name):
                 f"Error: Account '{account_name}' not found as User or Organization, or token lacks permissions.")
             return set(), None
         except Exception as e_org:
-             print(f"An error occurred fetching organization {account_name}: {e_org}")
-             return set(), None
+            print(
+                f"An error occurred fetching organization {account_name}: {e_org}")
+            return set(), None
     except Exception as e_user:
         print(f"An error occurred fetching user {account_name}: {e_user}")
         return set(), None
@@ -74,9 +75,10 @@ def get_account_repos(g, account_name):
     try:
         repos = {repo.name for repo in account.get_repos()}
         print(f"Found {len(repos)} repositories in {account_name}.")
-        return repos, account # Return user/org object
+        return repos, account  # Return user/org object
     except Exception as e_repos:
-        print(f"An error occurred fetching repos for {account_name}: {e_repos}")
+        print(
+            f"An error occurred fetching repos for {account_name}: {e_repos}")
         return set(), None
     except Exception as e:
         return set(), None
@@ -159,33 +161,38 @@ def compare_main_branches(dev_repo, prod_repo):
                 dev_blob = dev_repo.get_git_blob(dev_item.sha)
                 prod_blob = prod_repo.get_git_blob(prod_item.sha)
 
-                # Decode content using .decoded_content which should return bytes
+                # Decode base64 content and then decode bytes to string
                 dev_content, prod_content = None, None
                 diff_error = None
 
                 # --- Decode Dev Content ---
                 try:
-                    dev_bytes = dev_blob.decoded_content # Use .decoded_content
-                    if dev_bytes is None:
-                         # Handle case where content might be missing or too large?
-                         raise ValueError("Decoded content is None for dev blob.")
-                    dev_content = dev_bytes.decode('utf-8')
+                    # .content is base64 encoded string
+                    dev_base64_content = dev_blob.content
+                    if dev_base64_content:
+                        dev_bytes = base64.b64decode(dev_base64_content)
+                        dev_content = dev_bytes.decode('utf-8')
+                    else:
+                         # Handle empty file case if necessary, or assume None is ok
+                         dev_content = "" # Treat empty file as empty string
                 except UnicodeDecodeError:
                     diff_error = "Dev: Cannot decode as UTF-8 (likely binary)."
                 except Exception as e:
-                    diff_error = f"Dev: Error decoding content: {e}"
+                    diff_error = f"Dev: Error decoding base64/utf-8 content: {e}"
 
                 # --- Decode Prod Content ---
                 try:
-                    prod_bytes = prod_blob.decoded_content # Use .decoded_content
-                    if prod_bytes is None:
-                         raise ValueError("Decoded content is None for prod blob.")
-                    prod_content = prod_bytes.decode('utf-8')
+                    prod_base64_content = prod_blob.content
+                    if prod_base64_content:
+                        prod_bytes = base64.b64decode(prod_base64_content)
+                        prod_content = prod_bytes.decode('utf-8')
+                    else:
+                        prod_content = "" # Treat empty file as empty string
                 except UnicodeDecodeError:
                     error_msg = "Prod: Cannot decode as UTF-8 (likely binary)."
                     diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
                 except Exception as e:
-                    error_msg = f"Prod: Error decoding content: {e}"
+                    error_msg = f"Prod: Error decoding base64/utf-8 content: {e}"
                     diff_error = (diff_error + " | " + error_msg) if diff_error else error_msg
 
                 # --- Compare and Generate Diff ---
@@ -210,25 +217,41 @@ def compare_main_branches(dev_repo, prod_repo):
                     # If no diff generated but content wasn't identical earlier, it implies only metadata/SHA changed
                     # We already continued if content was identical, so if we reach here and diff is empty,
                     # it means something subtle changed (like line endings normalized by git). We'll still report it.
-                    # If diff is empty, it means content is identical after decoding
-                    # The template will handle displaying this correctly if needed,
-                    # but we only add to modified_files if there's a real diff or an error.
+                    # Process diff lines for styling
+                    processed_diff = []
+                    if diff:
+                        for line in diff:
+                            line = line.rstrip('\n') # Remove trailing newline added by difflib
+                            if line.startswith('+++'):
+                                line_type = 'hdr'
+                            elif line.startswith('---'):
+                                line_type = 'hdr'
+                            elif line.startswith('@@'):
+                                line_type = 'hdr'
+                            elif line.startswith('+'):
+                                line_type = 'add'
+                            elif line.startswith('-'):
+                                line_type = 'del'
+                            else:
+                                line_type = 'ctx' # Context line
+                            processed_diff.append({"type": line_type, "content": line})
+                        diff_output = processed_diff # Store the list of dicts
 
                 # Add to modified list ONLY if a diff was generated OR if there was a decoding/fetch error
                 if diff_output or diff_error:
                     comparison_result["modified_files"].append({
                         "path": path,
-                        "diff": diff_output,
+                        "diff": diff_output, # This is now the list of dicts or ""
                         "error": diff_error
                     })
                 # If we reach here without appending, it means SHAs differed but decoded content was identical.
 
             except GithubException as gh_api_e:
-                 # Handle errors getting blobs (e.g., permissions, not found)
-                 print(f"    Error getting blob for file '{path}': {gh_api_e}")
-                 comparison_result["modified_files"].append({
-                        "path": path, "diff": "", "error": f"Error accessing file content: {gh_api_e}"
-                 })
+                # Handle errors getting blobs (e.g., permissions, not found)
+                print(f"    Error getting blob for file '{path}': {gh_api_e}")
+                comparison_result["modified_files"].append({
+                    "path": path, "diff": "", "error": f"Error accessing file content: {gh_api_e}"
+                })
             except Exception as file_comp_e:
                 # Catch other potential errors during comparison for this file
                 print(f"    Error comparing file '{path}': {file_comp_e}")
@@ -243,12 +266,12 @@ def compare_main_branches(dev_repo, prod_repo):
                 not comparison_result["added_files"] and
                 not comparison_result["deleted_files"] and
                 not comparison_result["modified_files"]):
-            print("  Differences only in file SHAs, decoded content is identical. Setting status to 'In Sync'.")
+            print(
+                "  Differences only in file SHAs, decoded content is identical. Setting status to 'In Sync'.")
             comparison_result["status"] = "In Sync"
         else:
-             print(
+            print(
                 f"  Comparison complete: {len(comparison_result['added_files'])} added, {len(comparison_result['deleted_files'])} deleted, {len(comparison_result['modified_files'])} modified.")
-
 
     except UnknownObjectException as branch_e:
         error_msg = f"Error accessing default branch: {branch_e}. Does it exist in both repos?"

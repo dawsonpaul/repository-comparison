@@ -84,7 +84,10 @@
                                                 {% if mod_file.error %}
                                                     <p class="error-message">Could not generate diff: {{ mod_file.error }}</p>
                                                 {% elif mod_file.diff %}
-                                                    <pre><code>{{ mod_file.diff }}</code></pre>
+                                                    {# mod_file.diff is now a list of {'type': '...', 'content': '...'} #}
+                                                    <pre><code>{% for line in mod_file.diff -%}
+                                                        <span class="diff-{{ line.type }}">{{ line.content }}</span>
+                                                    {%- endfor %}</code></pre>
                                                 {% else %}
                                                      <p><i>Content differs, but diff is empty (e.g., whitespace/line ending changes only).</i></p>
                                                 {% endif %}
