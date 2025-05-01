@@ -130,49 +130,81 @@ def compare_main_branches(dev_repo, prod_repo):
                 # Decode content (handle potential encoding issues)
                 dev_content, prod_content = None, None
                 diff_error = None
+
+                # --- Decode Dev Content ---
+                dev_content_bytes = None # Initialize
                 try:
-                    # Try decoding as UTF-8 first
-                    dev_content_bytes = dev_content_blob.content.decode(
-                        'base64') if dev_content_blob.encoding == 'base64' else dev_content_blob.content
-                    dev_content = dev_content_bytes.decode('utf-8')
+                    dev_content_raw = dev_content_blob.content
+                    if dev_content_blob.encoding == 'base64':
+                        dev_content_bytes = dev_content_raw.decode('base64')
+                    elif isinstance(dev_content_raw, str): # Already decoded?
+                         # If it was already a string, maybe it's okay? Let's try decoding directly first.
+                         dev_content = dev_content_raw # Assume it's already decoded string
+                    else: # Assume bytes
+                        dev_content_bytes = dev_content_raw
+
+                    # If we ended up with bytes, try decoding as UTF-8
+                    if isinstance(dev_content_bytes, bytes):
+                        dev_content = dev_content_bytes.decode('utf-8')
+
                 except UnicodeDecodeError:
-                    diff_error = "Cannot decode dev content as UTF-8."
+                    diff_error = "Cannot decode dev content as UTF-8 (likely binary)."
                 except Exception as e:
                     diff_error = f"Error decoding dev content: {e}"
 
+                # --- Decode Prod Content ---
+                prod_content_bytes = None # Initialize to handle potential UnboundLocalError
                 try:
-                    prod_content_bytes = prod_content_blob.content.decode(
-                        'base64') if prod_content_blob.encoding == 'base64' else prod_content_blob.content
-                    prod_content = prod_content_bytes.decode('utf-8')
-                except UnicodeDecodeError:
-                    diff_error = (
-                        diff_error + " " if diff_error else "") + "Cannot decode prod content as UTF-8."
-                except Exception as e:
-                    diff_error = (
-                        diff_error + " " if diff_error else "") + f"Error decoding prod content: {e}"
+                    prod_content_raw = prod_content_blob.content
+                    if prod_content_blob.encoding == 'base64':
+                        prod_content_bytes = prod_content_raw.decode('base64')
+                    elif isinstance(prod_content_raw, str):
+                         prod_content = prod_content_raw # Assume it's already decoded string
+                    else: # Assume bytes
+                        prod_content_bytes = prod_content_raw
 
-                # Generate diff only if both contents were decoded successfully
+                    # If we ended up with bytes, try decoding as UTF-8
+                    if isinstance(prod_content_bytes, bytes):
+                         prod_content = prod_content_bytes.decode('utf-8')
+
+                except UnicodeDecodeError:
+                    error_msg = "Cannot decode prod content as UTF-8 (likely binary)."
+                    diff_error = (diff_error + " " + error_msg) if diff_error else error_msg
+                except Exception as e:
+                    error_msg = f"Error decoding prod content: {e}"
+                    diff_error = (diff_error + " " + error_msg) if diff_error else error_msg
+
+
+                # --- Compare and Generate Diff ---
                 diff_output = ""
-                if dev_content is not None and prod_content is not None:
+                # Only proceed if both were successfully decoded to strings
+                if isinstance(dev_content, str) and isinstance(prod_content, str):
+                    # Explicitly compare decoded content
+                    if dev_content == prod_content:
+                         continue # Content is identical after decoding, skip
+
+                    # Generate diff if content differs
                     diff = list(difflib.unified_diff(
-                        prod_content.splitlines(keepends=True),
+                        prod_content.splitlines(keepends=True), # Use keepends for accurate diff
                         dev_content.splitlines(keepends=True),
                         fromfile=f"a/{path} (Prod: {prod_item.sha[:7]})",
                         tofile=f"b/{path} (Dev: {dev_item.sha[:7]})",
-                        lineterm='\n'
+                        lineterm='' # difflib adds its own newlines
                     ))
-                    if diff:
+                    if diff: # Only join if there are actual diff lines
                         diff_output = "".join(diff)
-                    else:
-                        # Contents are identical after decoding, despite different SHAs (e.g., line ending changes)
-                        continue  # Skip adding to modified list if decoded content is same
+                    # If no diff generated but content wasn't identical earlier, it implies only metadata/SHA changed
+                    # We already continued if content was identical, so if we reach here and diff is empty,
+                    # it means something subtle changed (like line endings normalized by git). We'll still report it.
+                    # If diff is empty, the template handles it.
 
-                # Add to modified list if there was a diff or a decoding error
-                comparison_result["modified_files"].append({
-                    "path": path,
-                    "diff": diff_output,
-                    "error": diff_error  # Add error message if decoding failed
-                })
+                # Add to modified list if diff was generated OR if there was a decoding error
+                if diff_output or diff_error:
+                    comparison_result["modified_files"].append({
+                        "path": path,
+                        "diff": diff_output,
+                        "error": diff_error
+                    })
 
             except Exception as file_diff_e:
                 print(f"    Error comparing file '{path}': {file_diff_e}")

@@ -243,10 +243,45 @@ code {
     white-space: pre;
 }
 
-/* Diff line colors */
-pre code span.diff-add, pre code .diff-add { color: #1f7a2c; background-color: #e6ffec; display: block; }
-pre code span.diff-del, pre code .diff-del { color: #b31d28; background-color: #ffeef0; display: block; }
-pre code span.diff-hdr, pre code .diff-hdr { color: #57606a; font-weight: bold; display: block; }
+/* Diff line colors and styling */
+pre code .diff-add {
+    color: #1f7a2c; /* Dark green text */
+    background-color: #dff7e6; /* Lighter green background */
+    display: block;
+    padding-left: 2.5em; /* Indent text */
+    text-indent: -1.5em; /* Bring '+' sign back */
+}
+pre code .diff-add::before {
+    content: "+ ";
+    color: #1f7a2c;
+    font-weight: bold;
+    display: inline-block;
+    width: 1.5em; /* Ensure space for '+' */
+}
 
-/* Style diff lines directly if possible (basic) */
-pre code > span { display: block; } /* Treat spans as blocks for background */
+pre code .diff-del {
+    color: #b31d28; /* Dark red text */
+    background-color: #ffebe9; /* Lighter red background */
+    display: block;
+    padding-left: 2.5em; /* Indent text */
+    text-indent: -1.5em; /* Bring '-' sign back */
+}
+pre code .diff-del::before {
+    content: "- ";
+    color: #b31d28;
+    font-weight: bold;
+    display: inline-block;
+    width: 1.5em; /* Ensure space for '-' */
+}
+
+pre code .diff-hdr {
+    color: #57606a; /* Gray for header lines */
+    font-weight: bold;
+    display: block;
+    background-color: #f1f3f5; /* Light gray background for headers */
+    margin: 0.5em 0;
+    padding: 0.2em 0.5em;
+}
+
+/* Ensure spans within code are treated as blocks for background coloring */
+pre code > span { display: block; }
